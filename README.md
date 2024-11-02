@@ -2,13 +2,40 @@
 
 [![Build Status](https://github.com/CarloLucibello/AutoStructs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/CarloLucibello/AutoStructs.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-This package provides the macro `@structdef` to automatically define a struct with a given name and fields starting from its constructor. 
+This package provides the macro `@structdef` to automatically define a struct with a given name and fields starting from its constructor.
 
 The package has two goals:
-- Combine the definition of a struct and its constructor in a single concise step.
 - Allow to redefine a struct without restarting the REPL.
+- Combine the definition of a struct and its constructor in a single concise step.
 
 # Usage
+
+The macro has two methods. The first just defines a struct, given the name & fields:
+
+```julia
+julia> using AutoStructs
+
+# Define a struct from its fields:
+julia> @structdef Store(some::Vector, things::Vector)
+var"##Store#561"
+
+# Re-define it:
+julia> @structdef Store(some::AbstractVector, things)
+var"##Store#562"
+
+# Create an instance:
+julia> obj = Store([1,2], 3)
+Store(some = [1, 2], things = 3)
+
+julia> obj isa Store
+true
+
+# Define methods
+julia> Base.isempty(s::Store) = isempty(s.some) && isempty(s.things)
+```
+
+The second "method" of the macro acts on a constructor function:
+
 ```julia
 julia> using AutoStructs, Random
 
@@ -20,6 +47,9 @@ julia> @structdef function Layer(din::Int, dout::Int)
            return Layer(weight, bias)
        end
 var"##Layer#230"
+
+# Make it callable:
+julia> (lay::Layer)(x) = lay.weight * x .+ lay.bias
 
 # Now we can create an instance of the struct
 julia> layer = Layer(2, 4)
@@ -33,6 +63,13 @@ var"##Layer#230"{Matrix{Float64}, Vector{Float64}}
 
 julia> layer isa Layer{Matrix{Float64}, Vector{Float64}} # Layer is a parametric type
 true
+
+julia> @inferred layer([3,4.])  # ... hence operations using it are type-stable
+4-element Vector{Float64}:
+ -0.1318661204117887
+  5.059105943934839
+ -1.0380824711450396
+ -1.9023758645557405
 
 # You can redefine the struct without restarting the REPL
 julia> @structdef function Layer(din::Int, dout::Int, activation = identity)
@@ -80,7 +117,7 @@ help?> @structdef
       bias = zeros(dout)
       return Layer(weight, bias)
   end
-  
+
   layer = Layer(2, 4)
   layer isa Layer  # true
 
@@ -90,17 +127,17 @@ help?> @structdef
       weight::T1
       bias::T2
   end
-  
+
   function Layer001(din::Int, dout::Int)
       weight = randn(dout, din)
       bias = zeros(dout)
       return Layer001(weight, bias)
   end
-  
+
   Layer = Layer001
-  
+
   Base.show(io::IO, x::Layer) = ... # we do some pretty printing
-  Base.show(io::IO, ::MIME"text/plain", x::Layer) = ... 
+  Base.show(io::IO, ::MIME"text/plain", x::Layer) = ...
 
   Since Layer001{T1, T2} can hold any objects, even Layer("hello", "world"), there should never
   be an ambiguity between the struct's own constructor, and your constructor function. If the two
@@ -112,7 +149,7 @@ help?> @structdef
       bias = zeros(dout)
       return Layer(weight::AbstractMatrix, bias::AbstractVector)
   end
-  
+
   layer = Layer(2, 4)
 
   This creates a struct like this:

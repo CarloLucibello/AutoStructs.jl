@@ -3,6 +3,45 @@ module AutoStructs
 export @structdef
 
 """
+    @structdef MyType(field1, field2, ...)
+    @structdef MyType(field1::AbstractA, field2::AbstractB, ...)
+
+This is a macro for easily defining new types. Used like this, the macro
+creates a `struct` with the fields indicated.
+`@structdef MyType(field1, field2::AbstractB)` expands to roughly this:
+
+```julia
+struct MyType001{T1, T2 <: AbstractB}
+  field1::T1
+  fiedl2::T2
+end
+
+MyType = MyType001  # this allows re-definition
+```
+
+If the macro is run again with different fields, or different types,
+then another `struct MyType002` is created, bound to `MyType = MyType002`.
+This allows re-definition without re-starting Julia.
+
+The `struct`'s fields always have type parameters,
+which are restricted `T1 <: AbstractA` if desired.
+Thus operations on an instance of `m::MyType` should be type-stable,
+but construction `m = MyType(x, y)` will not be.
+
+You can make instances callable as usual,
+and define methods sepcialising on the type:
+```julia
+(m::MyType)(x) = m.field1(x) / m.field2(x)
+
+Base.length(m::MyType) = length(m.field1)
+```
+"""
+macro structdef(ex)
+    esc(_structdef(ex))
+end
+
+
+"""
     @structdef function MyType(args...; kws...); ...; return MyType(f1, f2, ...); end
 
 This is a macro for easily defining new types.
@@ -13,13 +52,13 @@ Typically the steps to define a new `struct` are:
    which initialises the fields.
 
 This macro combines these steps into one, by taking the constructor definition
-of step 2 and using the return line to automatically infer the field names 
+of step 2 and using the return line to automatically infer the field names
 and define the `struct`.
 
-Moreover, if you change the name or types of the fields, 
+Moreover, if you change the name or types of the fields,
 then the `struct` definition is automatically replaced.
 This works because this definition uses an auto-generated name, which is `== MyType`.
-Thanks to this, you can easily experiment with different field names and types, 
+Thanks to this, you can easily experiment with different field names and types,
 overcoming a major limitation of a Revise.jl workflow.
 
 ## Examples
@@ -52,11 +91,11 @@ end
 Layer = Layer001
 
 Base.show(io::IO, x::Layer) = ... # we do some pretty printing
-Base.show(io::IO, ::MIME"text/plain", x::Layer) = ... 
+Base.show(io::IO, ::MIME"text/plain", x::Layer) = ...
 ```
 
-Since `Layer001{T1, T2}` can hold any objects, even `Layer("hello", "world")`, 
-there should never be an ambiguity between the `struct`'s own constructor, 
+Since `Layer001{T1, T2}` can hold any objects, even `Layer("hello", "world")`,
+there should never be an ambiguity between the `struct`'s own constructor,
 and your constructor function. If the two have the same number of arguments,
 you can avoid the ambiguity by using type restrictions in the input arguments
 (as in the example above) or in the return line:
@@ -81,13 +120,26 @@ end
 ```
 and reassigns `Layer = Layer002`.
 """
-macro structdef(ex)
-    esc(_structdef(ex))
-end
+var"@structdef"
 
 const DEFINE = Dict{UInt, Tuple}()
 
+struct _NoCall
+    _NoCall() = error("this object is meant never to be created")
+end
+
 function _structdef(expr)
+    if Meta.isexpr(expr, :function)  # original path, @structdef function MyStruct(...); ...
+    elseif Meta.isexpr(expr, :call)  # one-line, @structdef MyStruct(field)
+        fun = expr.args[1]
+        newex = :(function $fun(_::$_NoCall)  # perhaps not the cleanest implementation
+            $expr
+        end)
+        return _structdef(newex)
+    else
+        throw("Expected a function definition, like `@structdef function MyStruct(...); ...`, or a call like `@structdef MyStruct(...)`")
+    end
+
     # Check first & last line of the input expression:
     Meta.isexpr(expr, :function) || throw("Expected a function definition, like `@structdef function MyStruct(...); ...`")
     fun = expr.args[1].args[1]
@@ -118,7 +170,7 @@ function _structdef(expr)
                 Expr(:(<:), ft.args[2], ex.args[2])
             end
         end
-        
+
         strfun = "$fun"
         ex = quote
             struct $name{$(types...)}
