@@ -2,7 +2,9 @@
 
 [![Build Status](https://github.com/CarloLucibello/AutoStructs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/CarloLucibello/AutoStructs.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-This package provides the macro `@structdef` to automatically define a struct with a given name and fields. The package as two main goals:
+This package provides the macro `@structdef` to automatically define a struct with a given name and fields starting from its constructor. 
+
+The package has two goals:
 - Combine the definition of a struct and its constructor in a single concise step.
 - Allow to redefine a struct without restarting the REPL.
 
@@ -122,6 +124,10 @@ help?> @structdef
 
   and reassigns Layer = Layer002.
 ```
+
+# Credits
+
+This package was inspired by conversations among Flux.jl developers on how to compactly define models which resulted in the defintion of the `@autostruct` macro in [Fluxperimental](https://github.com/FluxML/Fluxperimental.jl/pull/22). `@structdef` here is a version of `@autostruct` for generic usage instead of being tied to Flux.
 
 # Similar Packages
 
