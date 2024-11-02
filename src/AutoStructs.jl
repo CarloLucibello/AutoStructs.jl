@@ -1,9 +1,9 @@
 module AutoStructs
 
-export @autostruct
+export @structdef
 
 """
-    @autostruct function MyType(d); ...; MyType(f1, f2, ...); end
+    @structdef function MyType(args...; kws...); ...; return MyType(f1, f2, ...); end
 
 This is a macro for easily defining new types.
 
@@ -12,20 +12,20 @@ Typically the steps to define a new `struct` are:
 2. Define a constructor function like `MyType(arg1, arg2, ...)`,
    which initialises the fields.
 
-This macro combines these steps into one, by taking the construcor definition
-of step 2 and using the return line to automatically define the `struct`.
+This macro combines these steps into one, by taking the constructor definition
+of step 2 and using the return line to automatically infer the field names 
+and define the `struct`.
 
 Moreover, if you change the name or types of the fields, 
 then the `struct` definition is automatically replaced.
 This works because this definition uses an auto-generated name, which is `== MyType`.
-(But existing instances of the old `struct` are not changed in any way!)
 Thanks to this, you can easily experiment with different field names and types, 
 overcoming a major limitation of a Revise.jl workflow.
 
 ## Examples
 
 ```julia
-@autostruct function Layer(din::Int, dout::Int)
+@structdef function Layer(din::Int, dout::Int)
     weight = randn(dout, din)
     bias = zeros(dout)
     return Layer(weight, bias)
@@ -35,58 +35,72 @@ layer = Layer(2, 4)
 layer isa Layer  # true
 ```
 
-The `struct` defined by the macro here is something like this:
+The `@structdef` definition above is equivalent to the following code:
 
 ```julia
-struct MyModel001{T1, T2}
-  weight::T1
-  bias::T2
+struct Layer001{T1, T2}
+    weight::T1
+    bias::T2
 end
+
+function Layer001(din::Int, dout::Int)
+    weight = randn(dout, din)
+    bias = zeros(dout)
+    return Layer001(weight, bias)
+end
+
+Layer = Layer001
+
+Base.show(io::IO, x::Layer) = ... # we do some pretty printing
+Base.show(io::IO, ::MIME"text/plain", x::Layer) = ... 
 ```
 
-Since this can hold any objects, even `MyModel("hello", "world")`.
-As you can see by looking `methods(MyModel)`, there should never be an ambiguity
-between the `struct`'s own constructor, and your `MyModel(d::Int)`.
+Since `Layer001{T1, T2}` can hold any objects, even `Layer("hello", "world")`, 
+there should never be an ambiguity between the `struct`'s own constructor, 
+and your constructor function. If the two have the same number of arguments,
+you can avoid the ambiguity by using type restrictions in the input arguments
+(as in the example above) or in the return line:
 
-You can also restrict the types allowed in the struct:
 ```
-@autostruct function MyOtherModel(d1, d2, act=identity)
-  gamma = Embedding(128 => d1)
-  delta = Dense(d1 => d2, act)
-  MyOtherModel(gamma::Embedding, delta::Dense)  # struct will only hold these types
+@structdef function Layer(din, dout)
+    weight = randn(dout, din)
+    bias = zeros(dout)
+    return Layer(weight::AbstractMatrix, bias::AbstractVector)
 end
+
+layer = Layer(2, 4)
 ```
 
 This creates a struct like this:
 
 ```julia
-struct MyOtherModel001{T1 <: Embedding, T2 <: Dense}
-  gamma::T1
-  delta::T2
+struct Layer002{T1<:AbstractMatrix, T2<:AbstractVector}
+    weight::T1
+    bias::T2
 end
 ```
-
+and reassigns `Layer = Layer002`.
 """
-macro autostruct(ex)
-    esc(_autostruct(ex))
+macro structdef(ex)
+    esc(_structdef(ex))
 end
 
 const DEFINE = Dict{UInt, Tuple}()
 
-function _autostruct(expr)
+function _structdef(expr)
     # Check first & last line of the input expression:
-    Meta.isexpr(expr, :function) || throw("Expected a function definition, like `@autostruct function MyStruct(...); ...`")
+    Meta.isexpr(expr, :function) || throw("Expected a function definition, like `@structdef function MyStruct(...); ...`")
     fun = expr.args[1].args[1]
     ret = expr.args[2].args[end]
     if Meta.isexpr(ret, :return)
         ret = only(ret.args)
     end
-    Meta.isexpr(ret, :call) || throw("Last line of `@autostruct function $fun` must return `$fun(field1, field2, ...)`")
-    ret.args[1] === fun || throw("Last line of `@autostruct function $fun` must return `$fun(field1, field2, ...)`")
+    Meta.isexpr(ret, :call) || throw("Last line of `@structdef function $fun` must return `$fun(field1, field2, ...)`")
+    ret.args[1] === fun || throw("Last line of `@structdef function $fun` must return `$fun(field1, field2, ...)`")
     for ex in ret.args
         ex isa Symbol && continue
         Meta.isexpr(ex, :(::)) && continue
-        throw("Last line of `@autostruct function $fun` must return `$fun(field1, field2, ...)` or `$fun(field1::T1, field2::T2, ...)`, but got $ex")
+        throw("Last line of `@structdef function $fun` must return `$fun(field1, field2, ...)` or `$fun(field1::T1, field2::T2, ...)`, but got $ex")
     end
 
     # If the last line is new, construct struct definition:
@@ -105,13 +119,14 @@ function _autostruct(expr)
             end
         end
         
-        str = "$fun(...)"
+        strfun = "$fun"
         ex = quote
             struct $name{$(types...)}
                 $(fields...)
             end
-            $Base.show(io::IO, _::$name) = $print(io, $str)
-            $Base.show(io::IO, ::MIME"text/plain", x) = $prettyprint(io, $fun, x)
+            $Base.show(io::IO, x::$name) = $printinline(io, $strfun, x)
+            $Base.show(io::IO, ::MIME"text/plain", x::$name) = $printplain(io, $strfun, x)
+            # $Base.show(io::IO, T::Type{$name}) = printtype(io, $strfun, T)
             $fun = $name
         end
         (name, ex)
@@ -125,9 +140,14 @@ function _autostruct(expr)
     end
 end
 
+function printinline(io::IO, name, x)
+    print(io, "$name")
+    show(io, nt(x))
+end
 
-function prettyprint(io::IO, name, x)
-    print(io, "$name", nt(x))
+function printplain(io::IO, name, x)
+    print(io, "$name")
+    show(io, "text/plain", nt(x))
 end
 
 function nt(x::T) where T
