@@ -2,12 +2,16 @@
 
 [![Build Status](https://github.com/CarloLucibello/AutoStructs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/CarloLucibello/AutoStructs.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-This package provides the macro `@structdef` to automatically define a struct with a given name and fields. 
+This package provides the macro `@structdef` to automatically define a struct with a given name and fields. The package as two main goals:
+- Combine the definition of a struct and its constructor in a single concise step.
+- Allow to redefine a struct without restarting the REPL.
 
 # Usage
 ```julia
 julia> using AutoStructs, Random
 
+# Define a struct from a constructor function.
+# The struct is automatically named Layer and has two fields: weight and bias.
 julia> @structdef function Layer(din::Int, dout::Int)
            weight = randn(dout, din)
            bias = zeros(dout)
@@ -15,6 +19,7 @@ julia> @structdef function Layer(din::Int, dout::Int)
        end
 var"##Layer#230"
 
+# Now we can create an instance of the struct
 julia> layer = Layer(2, 4)
 Layer(weight = [-1.422950752982445 1.6242590842562115; -1.3393896739857631 0.8191382347282851; 0.3944420481119003 0.5955417101440335; 1.3944705999832914 1.1224997165166155], bias = [0.0, 0.0, 0.0, 0.0])
 
@@ -38,7 +43,7 @@ var"##Layer#231"
 julia> layer = Layer(2, 4, relu)
 Layer(weight = [-0.7682741444223932 0.6155740231067407; -1.506126153999598 -0.7804554207069556; -0.10944649893432226 1.782291543052865; 0.26095648405623756 1.7713201612872245], bias = [0.0, 0.0, 0.0, 0.0], activation = tanh)
 
-# Define methods for the struct
+# Define any new method for the struct
 julia> predict(l::Layer, x) = l.activation.(l.weight * x .+ l.bias)
 predict (generic function with 1 method)
 ```
