@@ -15,6 +15,11 @@ end
     return LinearOutRestr(W::AbstractMatrix, b::AbstractVector) # The last line defines the struct fields
 end
 
+@structdef function NoArgs(; a=1, b)
+    x = a+b
+    y = a-b
+    return NoArgs(x, y)
+end
     
 @testset "basic tests" begin
     linear = Linear(2, 4)
@@ -25,8 +30,7 @@ end
     @test linear.σ === tanh
 end 
 
-
-@testset "output restiction" begin
+@testset "output restriction" begin
     linear = LinearOutRestr(2, 4)
     @test linear isa LinearOutRestr
     @test linear isa LinearOutRestr{Matrix{Float64}, Vector{Float64}}
@@ -34,5 +38,12 @@ end
     @test linear.b isa Vector{Float64}
 end 
 
+@testset "keyword constructor" begin
+    linear = Linear(W=rand(4, 2), b=zeros(4), σ=tanh)
+    @test linear isa Linear
 
-
+    noargs = NoArgs(a = 3, b = 4)
+    @test noargs isa NoArgs
+    @test noargs.x == 7
+    @test noargs.y == -1
+end

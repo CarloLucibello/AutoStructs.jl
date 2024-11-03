@@ -38,7 +38,7 @@ layer isa Layer  # true
 The `@structdef` definition above is equivalent to the following code:
 
 ```julia
-struct Layer001{T1, T2}
+@kwdef struct Layer001{T1, T2}
     weight::T1
     bias::T2
 end
@@ -74,7 +74,7 @@ layer = Layer(2, 4)
 This creates a struct like this:
 
 ```julia
-struct Layer002{T1<:AbstractMatrix, T2<:AbstractVector}
+@kwdef struct Layer002{T1<:AbstractMatrix, T2<:AbstractVector}
     weight::T1
     bias::T2
 end
@@ -121,7 +121,7 @@ function _structdef(expr)
         
         strfun = "$fun"
         ex = quote
-            struct $name{$(types...)}
+            @kwdef struct $name{$(types...)}
                 $(fields...)
             end
             $Base.show(io::IO, x::$name) = $printinline(io, $strfun, x)
