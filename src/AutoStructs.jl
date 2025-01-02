@@ -18,9 +18,11 @@ and define the `struct`.
 
 Moreover, if you change the name or types of the fields, 
 then the `struct` definition is automatically replaced.
-This works because this definition uses an auto-generated name, which is `== MyType`.
+This works because this definition uses an auto-generated name, and `MyType` becomes an alias to it.
 Thanks to this, you can easily experiment with different field names and types, 
 overcoming a major limitation of a Revise.jl workflow.
+
+Subtyping is also supported, by adding a `<: Supertype` to the return line.
 
 ## Examples
 
@@ -61,7 +63,7 @@ and your constructor function. If the two have the same number of arguments,
 you can avoid the ambiguity by using type restrictions in the input arguments
 (as in the example above) or in the return line:
 
-```
+```julia
 @structdef function Layer(din, dout)
     weight = randn(dout, din)
     bias = zeros(dout)
@@ -80,6 +82,27 @@ This creates a struct like this:
 end
 ```
 and reassigns `Layer = Layer002`.
+
+Finally, we can also define a struct that is a subtype of another type:
+```julia
+abstract type AbstractLayer end
+
+@structdef function Layer(din, dout)
+    weight = randn(dout, din)
+    bias = zeros(dout)
+    return Layer(weight, bias) <: AbstractLayer
+end
+
+layer = Layer(din=2, dout=4)
+@assert layer isa AbstractLayer
+```
+The corresponding struct definition becomes
+```julia
+@kwdef struct Layer003{T1, T2} <: AbstractLayer
+    weight::T1
+    bias::T2
+end
+```
 """
 macro structdef(ex)
     esc(_structdef(ex))
@@ -94,6 +117,12 @@ function _structdef(expr)
     ret = expr.args[2].args[end]
     if Meta.isexpr(ret, :return)
         ret = only(ret.args)
+    end
+    if Meta.isexpr(ret, :(<:))
+        supertype = ret.args[2]
+        ret = ret.args[1]
+    else
+        supertype = :(Any)
     end
     Meta.isexpr(ret, :call) || throw("Last line of `@structdef function $fun` must return `$fun(field1, field2, ...)`")
     ret.args[1] === fun || throw("Last line of `@structdef function $fun` must return `$fun(field1, field2, ...)`")
@@ -121,7 +150,7 @@ function _structdef(expr)
         
         strfun = "$fun"
         ex = quote
-            @kwdef struct $name{$(types...)}
+            @kwdef struct $name{$(types...)} <: $supertype
                 $(fields...)
             end
             $Base.show(io::IO, x::$name) = $printinline(io, $strfun, x)
@@ -129,11 +158,14 @@ function _structdef(expr)
             # $Base.show(io::IO, T::Type{$name}) = printtype(io, $strfun, T)
             $fun = $name
         end
-        (name, ex)
+        return (name, ex)
     end
 
     # Change first line to use the struct's name:
     expr.args[1].args[1] = name
+    # Change last line to remove <:
+    expr.args[2].args[end] = ret
+
     quote
         $(defex.args...)  # struct definition
         $expr  # constructor function

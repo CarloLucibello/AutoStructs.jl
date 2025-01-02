@@ -20,7 +20,15 @@ end
     y = a-b
     return NoArgs(x, y)
 end
-    
+
+abstract type Supertype end
+
+@structdef function Subtype(a)
+    x = a
+    y = 2*a
+    return Subtype(x, y::Integer) <: Supertype
+end
+
 @testset "basic tests" begin
     linear = Linear(2, 4)
     @test linear isa Linear
@@ -46,4 +54,14 @@ end
     @test noargs isa NoArgs
     @test noargs.x == 7
     @test noargs.y == -1
+end
+
+@testset "subtyping" begin
+    subtype = Subtype(1)
+    @test subtype isa Subtype
+    @test subtype isa Supertype
+    @test subtype.x == 1
+    @test subtype.y == 2
+
+    @test_throws TypeError Subtype(1.1)
 end
