@@ -1,7 +1,7 @@
 name = "AutoStructs"
 uuid = "2e0df379-9877-4907-ab94-cd881f8d985b"
 authors = ["Michael Abbott and Carlo Lucibello"]
-version = "0.1"
+version = "0.1.1"
 
 [compat]
 julia = "1.10"
